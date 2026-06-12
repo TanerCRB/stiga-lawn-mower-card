@@ -632,7 +632,7 @@
       const DOCKED  = new Set(['docked', 'charging', 'waiting_for_command']);
 
       // Accumulate trail positions even before the map is initialized
-      if (MOWING.has(statusVal) && lat != null && !isNaN(lat)) {
+      if (MOWING.has(statusVal) && lat != null && !isNaN(lat) && lon != null && !isNaN(lon)) {
         const last = this._trail[this._trail.length - 1];
         const moved = !last || Math.hypot(last[0] - lat, last[1] - lon) > 5e-6;
         if (moved) {
@@ -645,11 +645,12 @@
 
       if (!this._map) return;
 
-      if (this._trail.length >= 2) {
+      const validTrail = this._trail.filter(p => p[0] != null && !isNaN(p[0]) && p[1] != null && !isNaN(p[1]));
+      if (validTrail.length >= 2) {
         if (this._trailLayer) {
-          this._trailLayer.setLatLngs(this._trail);
+          this._trailLayer.setLatLngs(validTrail);
         } else {
-          this._trailLayer = L.polyline(this._trail, {
+          this._trailLayer = L.polyline(validTrail, {
             color: '#1a6e36', weight: 2, opacity: 0.65, smoothFactor: 1,
           }).addTo(this._map);
         }
