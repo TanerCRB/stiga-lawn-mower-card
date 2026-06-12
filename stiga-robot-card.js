@@ -417,6 +417,7 @@
       this._chargingMarker  = null;
       this._zoneLayers      = [];
       this._obstacleLayers  = [];
+      this._pathLayers      = [];
       this._perimeterKey    = null;
       this._zoneData        = [];   // [{id, name, polygon}] from last perimeter update
       this._trail           = [];   // [[lat, lon], …] accumulated during mowing
@@ -459,6 +460,7 @@
         this._chargingMarker = null;
         this._zoneLayers  = [];
         this._obstacleLayers = [];
+        this._pathLayers  = [];
         this._trailLayer  = null;
         this._tileLayer   = null;
         this._perimeterKey = null;
@@ -614,17 +616,19 @@
       }
     }
 
-    /* ── Zone / obstacle polygon layers ── */
-    _updatePerimeters(zones, obstacles) {
+    /* ── Zone / path / obstacle polygon layers ── */
+    _updatePerimeters(zones, paths, obstacles) {
       if (!this._map) return;
-      const key = `${zones.length}:${obstacles.length}:${(zones[0]?.id ?? '')}`;
+      const key = `${zones.length}:${paths.length}:${obstacles.length}:${(zones[0]?.id ?? '')}`;
       if (key === this._perimeterKey) return;
       this._perimeterKey = key;
       this._zoneData = zones;
 
       this._zoneLayers.forEach(l => l.remove());
+      this._pathLayers.forEach(l => l.remove());
       this._obstacleLayers.forEach(l => l.remove());
       this._zoneLayers    = [];
+      this._pathLayers    = [];
       this._obstacleLayers = [];
 
       for (const zone of zones) {
@@ -638,6 +642,20 @@
         }).addTo(this._map);
         poly.bindTooltip(zone.name, { permanent: false, direction: 'center', className: 'stiga-tip' });
         this._zoneLayers.push(poly);
+      }
+
+      for (const path of paths) {
+        if (!path.polygon || path.polygon.length < 2) continue;
+        const poly = _L.polygon(path.polygon, {
+          color:       '#4285f4',
+          weight:      2,
+          fillColor:   '#4285f4',
+          fillOpacity: 0.20,
+          dashArray:   '6 4',
+          noClip:      true,
+        }).addTo(this._map);
+        poly.bindTooltip(path.name || 'Path', { permanent: false, direction: 'center', className: 'stiga-tip' });
+        this._pathLayers.push(poly);
       }
 
       for (const obs of obstacles) {
@@ -913,7 +931,8 @@
       const heading  = tracker?.attributes?.heading;
       const baseLat  = tracker?.attributes?.base_station_lat;
       const baseLon  = tracker?.attributes?.base_station_lon;
-      const zones    = tracker?.attributes?.zone_polygons     || [];
+      const zones     = tracker?.attributes?.zone_polygons     || [];
+      const paths     = tracker?.attributes?.path_polygons     || [];
       const obstacles = tracker?.attributes?.obstacle_polygons || [];
 
       const zoneNum = parseInt(this._state('sensor.zone'));
@@ -925,7 +944,7 @@
       const calEnd    = cal?.attributes?.end_time;
       this._updateNextSchedule(calState, calStart, calEnd);
 
-      this._updatePerimeters(zones, obstacles);
+      this._updatePerimeters(zones, paths, obstacles);
       this._updateZoneProgress(isNaN(zoneNum) ? null : zoneNum, isNaN(zonePct) ? null : zonePct);
       this._updateTrail(lat, lon, statusVal);
       this._updateBaseMarker(baseLat, baseLon);
