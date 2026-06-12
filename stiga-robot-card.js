@@ -29,16 +29,22 @@
   const TILE_URL     = 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
   const TILE_OPTIONS = { subdomains: '0123', maxZoom: 22, maxNativeZoom: 20 };
 
+  // Private Leaflet reference — isolated from window.L which other Lovelace
+  // cards (e.g. ultra-card) may replace with their own bundled version that
+  // has a broken _clipPoints implementation.
+  let _L = null;
+
   function loadLeaflet() {
     return new Promise((resolve) => {
-      if (window.L) { resolve(); return; }
+      if (_L) { resolve(); return; }
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = LEAFLET_CSS;
       document.head.appendChild(link);
       const script = document.createElement('script');
       script.src = LEAFLET_JS;
-      script.onload = resolve;
+      // Capture window.L immediately on load, before any other script can overwrite it.
+      script.onload = () => { _L = window.L; resolve(); };
       document.head.appendChild(script);
     });
   }
@@ -68,7 +74,7 @@
   /* ── Leaflet marker: arrow pointing in heading direction ─────────────── */
   function robotIcon(color, heading) {
     const r = (heading == null || isNaN(heading)) ? 0 : heading;
-    return L.divIcon({
+    return _L.divIcon({
       className: '',
       html: `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="-18 -18 36 36">
         <g transform="rotate(${r})">
@@ -84,7 +90,7 @@
 
   /* ── Leaflet marker: RTK antenna / base station (blue house) ────────── */
   function dockIcon() {
-    return L.divIcon({
+    return _L.divIcon({
       className: '',
       html: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="32" viewBox="0 0 24 28">
         <filter id="ds" x="-20%" y="-20%" width="140%" height="140%">
@@ -102,7 +108,7 @@
 
   /* ── Leaflet marker: charging dock (orange pin with bolt) ────────────── */
   function chargingIcon() {
-    return L.divIcon({
+    return _L.divIcon({
       className: '',
       html: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
         <filter id="cs" x="-25%" y="-15%" width="150%" height="130%">
@@ -524,14 +530,14 @@
         this.shadowRoot.insertBefore(link, this.shadowRoot.firstChild);
       }
 
-      const map = L.map(mapEl, {
+      const map = _L.map(mapEl, {
         zoomControl: true,
         attributionControl: false,
         zoom: 19,
         center: [51.505, -0.09],  // temporary center; panned on first fix
       });
 
-      L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(map);
+      _L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(map);
 
       this._map = map;
 
@@ -563,7 +569,7 @@
       if (this._baseMarker) {
         this._baseMarker.setLatLng([lat, lon]);
       } else {
-        this._baseMarker = L.marker([lat, lon], { icon: dockIcon(), zIndexOffset: -200 })
+        this._baseMarker = _L.marker([lat, lon], { icon: dockIcon(), zIndexOffset: -200 })
           .addTo(this._map)
           .bindTooltip('RTK Antenna', { permanent: false, direction: 'top', offset: [0, -28] });
       }
@@ -580,7 +586,7 @@
       if (this._chargingMarker) {
         this._chargingMarker.setLatLng([+lat, +lon]);
       } else {
-        this._chargingMarker = L.marker([+lat, +lon], { icon: chargingIcon(), zIndexOffset: -100 })
+        this._chargingMarker = _L.marker([+lat, +lon], { icon: chargingIcon(), zIndexOffset: -100 })
           .addTo(this._map)
           .bindTooltip(tip, { permanent: false, direction: 'top', offset: [0, -32] });
       }
@@ -601,7 +607,7 @@
 
       for (const zone of zones) {
         if (!zone.polygon || zone.polygon.length < 3) continue;
-        const poly = L.polygon(zone.polygon, {
+        const poly = _L.polygon(zone.polygon, {
           color:       '#34a853',
           weight:      2,
           fillColor:   '#34a853',
@@ -614,7 +620,7 @@
 
       for (const obs of obstacles) {
         if (!obs.polygon || obs.polygon.length < 3) continue;
-        const poly = L.polygon(obs.polygon, {
+        const poly = _L.polygon(obs.polygon, {
           color:       '#ea4335',
           weight:      2,
           fillColor:   '#ea4335',
@@ -661,7 +667,7 @@
           if (this._trailLayer) {
             this._trailLayer.setLatLngs(validTrail);
           } else {
-            this._trailLayer = L.polyline(validTrail, {
+            this._trailLayer = _L.polyline(validTrail, {
               color: '#1a6e36', weight: 2, opacity: 0.65, smoothFactor: 1, noClip: true,
             }).addTo(this._map);
           }
@@ -800,7 +806,7 @@
         this._marker.setLatLng(latlng);
         this._marker.setIcon(icon);
       } else {
-        this._marker = L.marker(latlng, { icon }).addTo(this._map);
+        this._marker = _L.marker(latlng, { icon }).addTo(this._map);
       }
 
       if (this._firstView) {
