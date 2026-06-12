@@ -606,6 +606,7 @@
           weight:      2,
           fillColor:   '#34a853',
           fillOpacity: 0.15,
+          noClip:      true,
         }).addTo(this._map);
         poly.bindTooltip(zone.name, { permanent: false, direction: 'center', className: 'stiga-tip' });
         this._zoneLayers.push(poly);
@@ -619,6 +620,7 @@
           fillColor:   '#ea4335',
           fillOpacity: 0.25,
           dashArray:   '5 4',
+          noClip:      true,
         }).addTo(this._map);
         poly.bindTooltip(obs.name || 'Obstacle', { permanent: false, direction: 'center', className: 'stiga-tip' });
         this._obstacleLayers.push(poly);
@@ -660,7 +662,7 @@
             this._trailLayer.setLatLngs(validTrail);
           } else {
             this._trailLayer = L.polyline(validTrail, {
-              color: '#1a6e36', weight: 2, opacity: 0.65, smoothFactor: 1,
+              color: '#1a6e36', weight: 2, opacity: 0.65, smoothFactor: 1, noClip: true,
             }).addTo(this._map);
           }
         } catch (e) {
