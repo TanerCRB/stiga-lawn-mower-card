@@ -421,7 +421,9 @@
       this._zoneData        = [];   // [{id, name, polygon}] from last perimeter update
       this._trail           = [];   // [[lat, lon], …] accumulated during mowing
       this._trailLayer      = null; // L.polyline
+      this._tileLayer       = null; // L.tileLayer — kept for forced redraw on focus
       this._visChangeHandler = null; // document visibilitychange listener ref
+      this._focusHandler     = null; // window focus listener ref
     }
 
     /* Called once by HA when the card config is parsed */
@@ -445,6 +447,10 @@
         document.removeEventListener('visibilitychange', this._visChangeHandler);
         this._visChangeHandler = null;
       }
+      if (this._focusHandler) {
+        window.removeEventListener('focus', this._focusHandler);
+        this._focusHandler = null;
+      }
       if (this._map) {
         this._map.remove();
         this._map         = null;
@@ -454,6 +460,7 @@
         this._zoneLayers  = [];
         this._obstacleLayers = [];
         this._trailLayer  = null;
+        this._tileLayer   = null;
         this._perimeterKey = null;
         this._firstView   = true;
       }
@@ -537,7 +544,7 @@
         center: [51.505, -0.09],  // temporary center; panned on first fix
       });
 
-      _L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(map);
+      this._tileLayer = _L.tileLayer(TILE_URL, TILE_OPTIONS).addTo(map);
 
       this._map = map;
 
@@ -551,11 +558,26 @@
       new ResizeObserver(() => map.invalidateSize())
         .observe(this._$('#map-wrap'));
 
+      // Recover from blank map after browser idle (no tab switch — same tab left sitting).
+      // Browser suspends Leaflet's rAF tile-load loop; on window focus we force a
+      // full tile redraw + size revalidation so tiles reload without a page refresh.
+      this._focusHandler = () => {
+        if (!this._map) return;
+        requestAnimationFrame(() => {
+          this._map.invalidateSize();
+          if (this._tileLayer) this._tileLayer.redraw();
+        });
+      };
+      window.addEventListener('focus', this._focusHandler);
+
       // Re-validate map size and reload tiles when browser tab returns from background.
       // Without this, long background sessions leave the map blank on return.
       this._visChangeHandler = () => {
         if (!document.hidden && this._map) {
-          requestAnimationFrame(() => this._map.invalidateSize());
+          requestAnimationFrame(() => {
+            this._map.invalidateSize();
+            if (this._tileLayer) this._tileLayer.redraw();
+          });
         }
       };
       document.addEventListener('visibilitychange', this._visChangeHandler);
