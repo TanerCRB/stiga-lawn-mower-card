@@ -645,14 +645,27 @@
 
       if (!this._map) return;
 
-      const validTrail = this._trail.filter(p => p[0] != null && !isNaN(p[0]) && p[1] != null && !isNaN(p[1]));
+      // Skip rendering if the map container has no dimensions yet (hidden tab,
+      // collapsed card). Leaflet's renderer bounds would be zero-size, causing
+      // _clipPoints / _getEdgeIntersection to return undefined and crash.
+      const mapContainer = this._map.getContainer();
+      if (!mapContainer || !mapContainer.offsetWidth || !mapContainer.offsetHeight) return;
+
+      const validTrail = this._trail.filter(
+        p => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1])
+      );
       if (validTrail.length >= 2) {
-        if (this._trailLayer) {
-          this._trailLayer.setLatLngs(validTrail);
-        } else {
-          this._trailLayer = L.polyline(validTrail, {
-            color: '#1a6e36', weight: 2, opacity: 0.65, smoothFactor: 1,
-          }).addTo(this._map);
+        try {
+          if (this._trailLayer) {
+            this._trailLayer.setLatLngs(validTrail);
+          } else {
+            this._trailLayer = L.polyline(validTrail, {
+              color: '#1a6e36', weight: 2, opacity: 0.65, smoothFactor: 1,
+            }).addTo(this._map);
+          }
+        } catch (e) {
+          // Leaflet renderer not yet ready — clear and retry on next update
+          if (this._trailLayer) { this._trailLayer.remove(); this._trailLayer = null; }
         }
       } else if (this._trailLayer) {
         this._trailLayer.remove();
