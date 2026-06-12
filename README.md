@@ -55,16 +55,18 @@ entity_prefix: bob        # required — robot name from STIGA app, lowercase
 
 ```yaml
 type: custom:stiga-robot-card
-entity_prefix: bob        # required — robot name from STIGA app, lowercase
-columns: 8                # optional — card width in grid columns (2–12)
-map_height: 200           # optional — map height in px (default: 280)
-show_map: false           # optional — hide the satellite map (default: true)
-show_progress: false      # optional — hide battery & garden bars (default: true)
-show_stats: false         # optional — hide stats grid (default: true)
-show_buttons: false       # optional — hide action buttons (default: true)
-dock_lat: 54.131500       # optional — charging station latitude
-dock_lon: 16.281700       # optional — charging station longitude
-dock_label: My Dock       # optional — charging station tooltip (default: "Charging Dock")
+entity_prefix: bob              # required — robot name from STIGA app, lowercase
+columns: 8                      # optional — card width in grid columns (2–12)
+map_height: 200                 # optional — map height in px (default: 280)
+show_map: false                 # optional — hide the satellite map (default: true)
+show_progress: false            # optional — hide battery & garden bars (default: true)
+show_stats: false               # optional — hide stats grid (default: true)
+show_buttons: false             # optional — hide action buttons (default: true)
+dock_offset_lat_m: 1.23        # optional — dock offset north from RTK antenna (metres) ← recommended
+dock_offset_lon_m: -0.87       # optional — dock offset east from RTK antenna (metres)  ← recommended
+dock_lat: 54.131500             # optional — dock latitude (fallback if offsets not set)
+dock_lon: 16.281700             # optional — dock longitude (fallback if offsets not set)
+dock_label: My Dock             # optional — charging station tooltip (default: "Charging Dock")
 ```
 
 | Option | Type | Default | Description |
@@ -76,9 +78,22 @@ dock_label: My Dock       # optional — charging station tooltip (default: "Cha
 | `show_progress` | boolean | `true` | Show/hide battery and garden progress bars |
 | `show_stats` | boolean | `true` | Show/hide the 6-cell stats grid |
 | `show_buttons` | boolean | `true` | Show/hide Start / Stop / Dock buttons |
-| `dock_lat` | number | — | Latitude of the physical charging dock (orange pin marker) |
-| `dock_lon` | number | — | Longitude of the physical charging dock (orange pin marker) |
+| `dock_offset_lat_m` | number | — | Dock position: metres north (+) / south (−) from the RTK antenna. Read `offset_lat_m` from device tracker attributes while robot is docked. Takes priority over `dock_lat`. |
+| `dock_offset_lon_m` | number | — | Dock position: metres east (+) / west (−) from the RTK antenna. Read `offset_lon_m` from device tracker attributes while robot is docked. Takes priority over `dock_lon`. |
+| `dock_lat` | number | — | Dock latitude — absolute GPS fallback when offsets are not configured |
+| `dock_lon` | number | — | Dock longitude — absolute GPS fallback when offsets are not configured |
 | `dock_label` | string | `Charging Dock` | Tooltip for the charging dock marker |
+
+### Setting dock position (recommended method)
+
+While the robot is **docked**, go to **Developer Tools → States**, find `device_tracker.<prefix>_location` and copy the `offset_lat_m` and `offset_lon_m` attribute values. Use them directly:
+
+```yaml
+dock_offset_lat_m: 1.234    # value from offset_lat_m attribute
+dock_offset_lon_m: -0.873   # value from offset_lon_m attribute
+```
+
+The card computes the dock marker position as `RTK antenna + offset`, so the marker will land exactly where the robot stood when docked.
 
 ### Finding your `entity_prefix`
 

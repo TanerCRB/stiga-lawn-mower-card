@@ -885,11 +885,21 @@
       this._updateZoneProgress(isNaN(zoneNum) ? null : zoneNum, isNaN(zonePct) ? null : zonePct);
       this._updateTrail(lat, lon, statusVal);
       this._updateBaseMarker(baseLat, baseLon);
-      this._updateChargingMarker(
-        this._config.dock_lat,
-        this._config.dock_lon,
-        this._config.dock_label,
-      );
+
+      // Dock marker: offset-based position (meters from RTK antenna) takes priority
+      // over absolute dock_lat/dock_lon so user can copy offset_lat_m/offset_lon_m
+      // directly from device_tracker attributes while the robot is docked.
+      let dockLat = this._config.dock_lat  != null ? +this._config.dock_lat  : null;
+      let dockLon = this._config.dock_lon  != null ? +this._config.dock_lon  : null;
+      const offLatM = this._config.dock_offset_lat_m != null ? +this._config.dock_offset_lat_m : null;
+      const offLonM = this._config.dock_offset_lon_m != null ? +this._config.dock_offset_lon_m : null;
+      if (offLatM != null && offLonM != null && baseLat != null && baseLon != null) {
+        const LAT_M = 111320;
+        dockLat = baseLat + offLatM / LAT_M;
+        dockLon = baseLon + offLonM / (LAT_M * Math.cos(baseLat * Math.PI / 180));
+      }
+      this._updateChargingMarker(dockLat, dockLon, this._config.dock_label);
+
       this._updateMap(lat, lon, heading, cfg.color);
     }
 
