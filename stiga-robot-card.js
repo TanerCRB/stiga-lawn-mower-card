@@ -415,17 +415,41 @@
       this._zoneData        = [];   // [{id, name, polygon}] from last perimeter update
       this._trail           = [];   // [[lat, lon], …] accumulated during mowing
       this._trailLayer      = null; // L.polyline
+      this._visChangeHandler = null; // document visibilitychange listener ref
     }
 
     /* Called once by HA when the card config is parsed */
     setConfig(config) {
       if (!config.entity_prefix) throw new Error('stiga-robot-card: entity_prefix is required');
       this._config = config;
+      // Clean up existing Leaflet instance before resetting DOM — otherwise
+      // this._map keeps referencing a detached element after innerHTML is replaced.
+      this._destroyMap();
       this.shadowRoot.innerHTML = TEMPLATE;
       this._applyLayout();
       this._bindButtons();
       if (config.show_map !== false) {
         loadLeaflet().then(() => this._initMap());
+      }
+    }
+
+    /* Remove Leaflet instance and all associated listeners/markers cleanly. */
+    _destroyMap() {
+      if (this._visChangeHandler) {
+        document.removeEventListener('visibilitychange', this._visChangeHandler);
+        this._visChangeHandler = null;
+      }
+      if (this._map) {
+        this._map.remove();
+        this._map         = null;
+        this._marker      = null;
+        this._baseMarker  = null;
+        this._chargingMarker = null;
+        this._zoneLayers  = [];
+        this._obstacleLayers = [];
+        this._trailLayer  = null;
+        this._perimeterKey = null;
+        this._firstView   = true;
       }
     }
 
@@ -520,6 +544,15 @@
       // Keep the map correct when the card is revealed later (tab switch, etc.)
       new ResizeObserver(() => map.invalidateSize())
         .observe(this._$('#map-wrap'));
+
+      // Re-validate map size and reload tiles when browser tab returns from background.
+      // Without this, long background sessions leave the map blank on return.
+      this._visChangeHandler = () => {
+        if (!document.hidden && this._map) {
+          requestAnimationFrame(() => this._map.invalidateSize());
+        }
+      };
+      document.addEventListener('visibilitychange', this._visChangeHandler);
 
       if (this._hass) this._update();  // apply buffered state
     }
