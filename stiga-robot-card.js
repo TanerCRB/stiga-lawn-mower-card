@@ -19,6 +19,29 @@
  *   dock_lat:          54.131500   # GPS latitude of the charging dock
  *   dock_lon:          16.281700   # GPS longitude of the charging dock
  *   dock_label:        Charging Dock   # tooltip label (default: "Charging Dock")
+ *
+ * Configurable stats bar (default: zone, zone_pct, satellites, schedule, area, rssi):
+ *   stats:
+ *     - zone           # current mowing zone number
+ *     - zone_pct       # zone completion %
+ *     - garden_pct     # total garden completion %
+ *     - satellites     # GPS satellites in view
+ *     - schedule       # minutes left in schedule window
+ *     - area           # garden area m²
+ *     - rssi           # cellular RSSI dBm
+ *     - rsrp           # RSRP dBm
+ *     - rsrq           # RSRQ dB
+ *     - signal         # signal quality %
+ *     - battery        # battery %
+ *     - battery_cap    # battery capacity mAh
+ *     - battery_v      # battery voltage mV (charging only)
+ *     - battery_temp   # battery temperature °C (charging only)
+ *     - speed          # robot speed m/s
+ *     - rtk            # RTK quality
+ *     - coverage       # GPS coverage
+ *     - work_time      # total work hours
+ *     - obstacles      # obstacle count
+ *     - zones_count    # zone count
  */
 
 (function () {
@@ -70,6 +93,31 @@
     lid_open:             { label: 'Lid Open',          color: '#ea4335', pulse: true  },
     startup_required:     { label: 'Startup Required',  color: '#ea4335', pulse: true  },
   };
+
+  /* ── Configurable stats definitions ─────────────────────────────────── */
+  const STAT_DEFS = {
+    zone:         { label: 'Zone',         entity: 'sensor.zone',                fmt: null },
+    zone_pct:     { label: 'Zone %',       entity: 'sensor.zone_completed',      fmt: v => `${parseFloat(v).toFixed(0)}%` },
+    garden_pct:   { label: 'Garden %',     entity: 'sensor.garden_completed',    fmt: v => `${parseFloat(v).toFixed(0)}%` },
+    satellites:   { label: 'Satellites',   entity: 'sensor.gps_satellites',      fmt: null },
+    schedule:     { label: 'Sched. Left',  entity: 'sensor.schedule_remaining',  fmt: v => { const m = Math.round(parseFloat(v)); const h = Math.floor(m / 60); return h > 0 ? `${h}h ${m % 60}m` : `${m}m`; } },
+    area:         { label: 'Garden m²',    entity: 'sensor.garden_area',         fmt: v => `${parseFloat(v).toFixed(0)}` },
+    rssi:         { label: 'RSSI dBm',     entity: 'sensor.rssi',                fmt: null },
+    rsrp:         { label: 'RSRP dBm',     entity: 'sensor.rsrp',                fmt: null },
+    rsrq:         { label: 'RSRQ dB',      entity: 'sensor.rsrq',                fmt: null },
+    signal:       { label: 'Signal %',     entity: 'sensor.signal_quality',      fmt: v => `${parseFloat(v).toFixed(0)}%` },
+    battery:      { label: 'Battery',      entity: 'sensor.battery',             fmt: v => `${parseFloat(v).toFixed(0)}%` },
+    battery_cap:  { label: 'Batt. mAh',    entity: 'sensor.battery_capacity',    fmt: null },
+    battery_v:    { label: 'Batt. mV',     entity: 'sensor.battery_voltage',     fmt: null },
+    battery_temp: { label: 'Batt. °C',     entity: 'sensor.battery_temperature', fmt: v => `${parseFloat(v).toFixed(1)}°` },
+    speed:        { label: 'Speed m/s',    entity: 'sensor.speed',               fmt: v => `${parseFloat(v).toFixed(2)}` },
+    rtk:          { label: 'RTK Quality',  entity: 'sensor.rtk_quality',         fmt: null },
+    coverage:     { label: 'GPS Coverage', entity: 'sensor.gps_coverage',        fmt: null },
+    work_time:    { label: 'Work Hours',   entity: 'sensor.total_work_time',     fmt: v => `${parseFloat(v).toFixed(0)}h` },
+    obstacles:    { label: 'Obstacles',    entity: 'sensor.obstacles',           fmt: null },
+    zones_count:  { label: 'Zones',        entity: 'sensor.garden_zones',        fmt: null },
+  };
+  const DEFAULT_STATS = ['zone', 'zone_pct', 'satellites', 'schedule', 'area', 'rssi'];
 
   /* ── Leaflet marker: arrow pointing in heading direction ─────────────── */
   function robotIcon(color, heading) {
@@ -252,8 +300,8 @@
       border-right: 1px solid var(--divider-color, #e0e0e0);
       border-bottom: 1px solid var(--divider-color, #e0e0e0);
     }
-    .stat-cell:nth-child(3n) { border-right: none; }
-    .stat-cell:nth-last-child(-n+3) { border-bottom: none; }
+    .stat-cell.no-right { border-right: none; }
+    .stat-cell.no-bot   { border-bottom: none; }
     .stat-value {
       font-size: 18px;
       font-weight: 600;
@@ -361,32 +409,7 @@
       <div class="map-msg js-map-msg">Loading map…</div>
     </div>
 
-    <div class="stats-grid">
-      <div class="stat-cell">
-        <div class="stat-value js-zone">—</div>
-        <div class="stat-label">Zone</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-value js-zone-pct">—</div>
-        <div class="stat-label">Zone %</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-value js-sats">—</div>
-        <div class="stat-label">Satellites</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-value js-sched">—</div>
-        <div class="stat-label">Sched. Left</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-value js-area">—</div>
-        <div class="stat-label">Garden m²</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-value js-rssi">—</div>
-        <div class="stat-label">RSSI dBm</div>
-      </div>
-    </div>
+    <div class="stats-grid js-stats-grid"></div>
 
     <div class="schedule-row js-schedule-row" style="display:none">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" opacity=".55">
@@ -438,6 +461,7 @@
       this._destroyMap();
       this.shadowRoot.innerHTML = TEMPLATE;
       this._applyLayout();
+      this._buildStatsGrid();
       this._bindButtons();
       if (config.show_map !== false) {
         loadLeaflet().then(() => this._initMap());
@@ -955,17 +979,12 @@
         el.classList.toggle('dim', !ok);
       };
 
-      set('.js-zone',     this._state('sensor.zone'));
-      set('.js-zone-pct', this._state('sensor.zone_completed'), v => `${parseFloat(v).toFixed(0)}%`);
-      set('.js-sats',     this._state('sensor.gps_satellites'));
-      set('.js-sched',    this._state('sensor.schedule_remaining'), v => {
-        const m = Math.round(parseFloat(v));
-        const h = Math.floor(m / 60);
-        const r = m % 60;
-        return h > 0 ? `${h}h ${r}m` : `${m}m`;
-      });
-      set('.js-area',     this._state('sensor.garden_area'),    v => `${parseFloat(v).toFixed(0)}`);
-      set('.js-rssi',     this._state('sensor.rssi'));
+      const statKeys = (Array.isArray(this._config.stats) && this._config.stats.length)
+        ? this._config.stats : DEFAULT_STATS;
+      for (const key of statKeys) {
+        const def = STAT_DEFS[key];
+        if (def) set(`[data-stat="${key}"]`, this._state(def.entity), def.fmt);
+      }
 
       /* Map: read from device_tracker attributes */
       const tracker  = this._hass.states[
@@ -1009,6 +1028,27 @@
       this._updateChargingMarker(dockLat, dockLon, this._config.dock_label);
 
       this._updateMap(lat, lon, heading, cfg.color);
+    }
+
+    _buildStatsGrid() {
+      const grid = this._$('.js-stats-grid');
+      if (!grid) return;
+      const keys = (Array.isArray(this._config.stats) && this._config.stats.length)
+        ? this._config.stats : DEFAULT_STATS;
+      const cols = 3;
+      const lastRowStart = Math.floor((keys.length - 1) / cols) * cols;
+      grid.innerHTML = keys.map((key, i) => {
+        const def = STAT_DEFS[key];
+        if (!def) return '';
+        const cls = ['stat-cell',
+          (i + 1) % cols === 0 ? 'no-right' : '',
+          i >= lastRowStart    ? 'no-bot'   : '',
+        ].filter(Boolean).join(' ');
+        return `<div class="${cls}">
+          <div class="stat-value" data-stat="${key}">—</div>
+          <div class="stat-label">${def.label}</div>
+        </div>`;
+      }).join('');
     }
 
     // HA Sections dashboard (2024.3+): controls how many columns the card spans.
