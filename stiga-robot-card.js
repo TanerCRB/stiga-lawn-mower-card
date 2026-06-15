@@ -613,7 +613,7 @@
           if (!this._mapBrokenAt) {
             this._mapBrokenAt = Date.now();
             this._fixMap();
-          } else if (Date.now() - this._mapBrokenAt > 10000) {
+          } else if (Date.now() - this._mapBrokenAt > 5000) {
             this._mapBrokenAt = null;
             this._recreateMap();
           }
@@ -634,6 +634,17 @@
         const container = this._map.getContainer();
         if (!container || container.offsetHeight < 50) return;
         this._map.invalidateSize();
+        // invalidateSize() returns early when container dimensions haven't changed
+        // (same-size check: if oldSize == newSize it exits without firing any events).
+        // After tab suspension the container is still e.g. 600 px but the SVG renderer
+        // got reset to height=0. Fire moveend directly to force renderer._update()
+        // which re-reads the correct container size and sets SVG height properly.
+        try {
+          const svg = this._map.getPanes().overlayPane?.querySelector('svg');
+          if (svg && (parseInt(svg.getAttribute('height'), 10) || 0) === 0) {
+            this._map.fire('moveend');
+          }
+        } catch (_) {}
         if (this._tileLayer) this._tileLayer.redraw();
       };
       requestAnimationFrame(attempt);
