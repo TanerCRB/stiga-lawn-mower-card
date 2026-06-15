@@ -6,7 +6,7 @@
 
 Custom Lovelace card for the [Stiga Lawn Mower](https://github.com/TanerCRB/Stiga_Lawn_Mower) Home Assistant integration.
 
-Shows live mowing status, satellite map with robot position, zone progress gradient, mowing trail, schedule info, and action buttons — all in one card.
+Shows live mowing status, satellite map with robot position, zone/corridor/obstacle polygons, zone progress gradient, mowing trail, schedule info, configurable stats grid, and action buttons — all in one card.
 
 ![Stiga Robot Card — live mowing view with zone gradient, satellite map and stats grid](img/card-preview.png)
 
@@ -67,6 +67,13 @@ dock_offset_lon_m: -0.87       # optional — dock offset east from RTK antenna 
 dock_lat: 54.131500             # optional — dock latitude (fallback if offsets not set)
 dock_lon: 16.281700             # optional — dock longitude (fallback if offsets not set)
 dock_label: My Dock             # optional — charging station tooltip (default: "Charging Dock")
+stats:                          # optional — customise the stats grid (see Stats Grid below)
+  - zone
+  - speed
+  - battery
+  - schedule
+  - area
+  - rssi
 ```
 
 | Option | Type | Default | Description |
@@ -76,13 +83,59 @@ dock_label: My Dock             # optional — charging station tooltip (default
 | `map_height` | number | `280` | Map section height in pixels |
 | `show_map` | boolean | `true` | Show/hide the satellite map |
 | `show_progress` | boolean | `true` | Show/hide battery and garden progress bars |
-| `show_stats` | boolean | `true` | Show/hide the 6-cell stats grid |
+| `show_stats` | boolean | `true` | Show/hide the stats grid |
 | `show_buttons` | boolean | `true` | Show/hide Start / Stop / Dock buttons |
+| `stats` | list | see below | Which metrics to show in the stats grid and in what order |
 | `dock_offset_lat_m` | number | — | Dock position: metres north (+) / south (−) from the RTK antenna. Read `offset_lat_m` from device tracker attributes while robot is docked. Takes priority over `dock_lat`. |
 | `dock_offset_lon_m` | number | — | Dock position: metres east (+) / west (−) from the RTK antenna. Read `offset_lon_m` from device tracker attributes while robot is docked. Takes priority over `dock_lon`. |
 | `dock_lat` | number | — | Dock latitude — absolute GPS fallback when offsets are not configured |
 | `dock_lon` | number | — | Dock longitude — absolute GPS fallback when offsets are not configured |
 | `dock_label` | string | `Charging Dock` | Tooltip for the charging dock marker |
+
+---
+
+## Stats Grid
+
+The bottom stats grid shows 6 cells by default (3 × 2). Add a `stats:` list to choose any combination or order from the 20 available metrics:
+
+```yaml
+stats:
+  - zone        # current mowing zone number
+  - zone_pct    # zone completion %
+  - satellites  # GPS satellites in view
+  - schedule    # minutes remaining in schedule window
+  - area        # garden area m²
+  - rssi        # cellular RSSI dBm
+```
+
+Any number of cells is supported — the grid always uses 3 columns. Omit `stats:` entirely to keep the default layout.
+
+### All available stat keys
+
+| Key | Label | Notes |
+|---|---|---|
+| `zone` | Zone | Current mowing zone number |
+| `zone_pct` | Zone % | Completion within the active zone |
+| `garden_pct` | Garden % | Total garden completion |
+| `satellites` | Satellites | GPS satellites in view |
+| `schedule` | Sched. Left | Minutes left in the active schedule window |
+| `area` | Garden m² | Total garden area |
+| `rssi` | RSSI dBm | Cellular signal strength |
+| `rsrp` | RSRP dBm | LTE reference signal received power |
+| `rsrq` | RSRQ dB | LTE reference signal received quality |
+| `signal` | Signal % | Signal quality percentage |
+| `battery` | Battery | Battery level % |
+| `battery_cap` | Batt. mAh | Battery capacity |
+| `battery_v` | Batt. mV | Battery voltage — populated during charging only |
+| `battery_temp` | Batt. °C | Battery temperature — populated during charging only |
+| `speed` | Speed m/s | Robot movement speed derived from RTK position |
+| `rtk` | RTK Quality | RTK positioning quality |
+| `coverage` | GPS Coverage | GPS coverage index |
+| `work_time` | Work Hours | Cumulative mowing hours |
+| `obstacles` | Obstacles | Number of mapped obstacles |
+| `zones_count` | Zones | Number of mowing zones |
+
+---
 
 ### Setting dock position (recommended method)
 
@@ -129,10 +182,11 @@ lawn_mower: lawn_mower.garden_robot
 | **Charging dock marker** | Orange pin — shown when `dock_lat`/`dock_lon` are set |
 | **Zone polygons** | Green filled polygons for each mowing zone |
 | **Zone progress gradient** | Active zone fills bottom-to-top showing % of zone already mowed |
+| **Corridor polygons** | Blue dashed polygons for passages between zones (from STIGA.GO) |
 | **Obstacle polygons** | Red dashed polygons for mapped obstacles |
 | **Mowing trail** | Dark-green polyline tracing the robot's path this session; cleared when idle |
 | **Next schedule window** | "Next mowing: Wednesday 08:00 – 10:30" from the calendar entity |
-| **Stats grid** | Zone, Zone %, Satellites, Schedule remaining, Garden m², RSSI |
+| **Stats grid** | Configurable — default: Zone, Zone %, Satellites, Schedule remaining, Garden m², RSSI |
 | **Action buttons** | Start / Stop / Dock |
 
 ---
