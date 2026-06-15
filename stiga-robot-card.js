@@ -426,6 +426,7 @@
       this._visChangeHandler = null; // document visibilitychange listener ref
       this._focusHandler     = null; // window focus listener ref
       this._healthTimer      = null; // setInterval — periodic SVG-height=0 detector
+      this._mapBrokenAt      = null; // Date.now() when broken state first detected
     }
 
     /* Called once by HA when the card config is parsed */
@@ -457,6 +458,7 @@
         clearInterval(this._healthTimer);
         this._healthTimer = null;
       }
+      this._mapBrokenAt = null;
       if (this._map) {
         this._map.remove();
         this._map         = null;
@@ -556,19 +558,15 @@
       this._map = map;
 
       // Leaflet must recompute its viewport after the card is painted.
-      // rAF handles normal render; 400 ms timeout is a fallback for cards
-      // inside inactive dashboard tabs or collapsed conditional cards.
       requestAnimationFrame(() => map.invalidateSize());
       setTimeout(() => map.invalidateSize(), 400);
 
-      // Keep the map correct when the card is revealed later (tab switch, etc.)
-      new ResizeObserver(() => map.invalidateSize())
+      // ResizeObserver: routes through _fixMap() so the guard (offsetHeight>50)
+      // and retry logic apply. Previously used direct invalidateSize() — that fired
+      // at height=0 when wallpanel collapsed the container, corrupting the viewport.
+      new ResizeObserver(() => this._fixMap())
         .observe(this._$('#map-wrap'));
 
-      // Recover from blank map after browser idle / wallpanel / tab switch.
-      // Single requestAnimationFrame is unreliable — it fires before the container
-      // finishes re-layout and invalidateSize() may run at height ≈ 0, locking
-      // the map into a broken state. _fixMap() guards on offsetHeight and retries.
       this._focusHandler = () => this._fixMap();
       window.addEventListener('focus', this._focusHandler);
 
@@ -577,9 +575,10 @@
       };
       document.addEventListener('visibilitychange', this._visChangeHandler);
 
-      // Periodic health check: if the Leaflet SVG overlay has height=0 while
-      // the container is properly sized, the map was invalidated at the wrong
-      // moment (e.g. during a wallpanel fade or HA panel transition). Fix it.
+      // Two-stage health check:
+      // Stage 1 (first detection): call _fixMap() and record when broken state began.
+      // Stage 2 (still broken after 10 s): recreate the Leaflet map from scratch.
+      // The recreation is the nuclear option — guaranteed to fix any corrupt state.
       this._healthTimer = setInterval(() => {
         if (document.hidden || !this._map) return;
         const container = this._map.getContainer();
@@ -587,19 +586,24 @@
         const svg = this._map.getPanes().overlayPane?.querySelector('svg');
         const svgH = svg ? (parseInt(svg.getAttribute('height'), 10) || 0) : -1;
         if (svgH === 0) {
-          this._map.invalidateSize();
-          if (this._tileLayer) this._tileLayer.redraw();
+          if (!this._mapBrokenAt) {
+            this._mapBrokenAt = Date.now();
+            this._fixMap();
+          } else if (Date.now() - this._mapBrokenAt > 10000) {
+            this._mapBrokenAt = null;
+            this._recreateMap();
+          }
+        } else {
+          this._mapBrokenAt = null;
         }
-      }, 5000);
+      }, 4000);
 
       if (this._hass) this._update();  // apply buffered state
     }
 
     /* ── Map recovery helper ──
-     * Called on window focus, visibilitychange, and by the health timer.
-     * Guards on container offsetHeight before calling invalidateSize() so
-     * we never lock the map into a broken zero-height state mid-transition.
-     * Retries at 200 / 600 / 1500 ms to cover slow panel animations (wallpanel). */
+     * Guards on offsetHeight > 50 so we never call invalidateSize() while the
+     * container is mid-transition (height ≈ 0). Retries cover slow animations. */
     _fixMap() {
       const attempt = () => {
         if (!this._map) return;
@@ -610,6 +614,22 @@
       };
       requestAnimationFrame(attempt);
       [200, 600, 1500].forEach(ms => setTimeout(attempt, ms));
+    }
+
+    /* ── Full map recreation ──
+     * Nuclear option: destroys and re-initialises the Leaflet instance.
+     * Called by the health timer when the soft fix (_fixMap) has not resolved
+     * SVG height=0 within 10 s. Trail data is preserved across the restart. */
+    _recreateMap() {
+      this._destroyMap();
+      loadLeaflet().then(() => this._initMap());
+    }
+
+    /* ── Custom element lifecycle ──
+     * Fires when the element is reattached to DOM after being detached
+     * (happens in HA Lovelace when switching between dashboard views). */
+    connectedCallback() {
+      if (this._map) this._fixMap();
     }
 
     /* ── RTK antenna marker (blue house) ── */
