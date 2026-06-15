@@ -425,6 +425,7 @@
       this._tileLayer       = null; // L.tileLayer — kept for forced redraw on focus
       this._visChangeHandler = null; // document visibilitychange listener ref
       this._focusHandler     = null; // window focus listener ref
+      this._healthTimer      = null; // setInterval — periodic SVG-height=0 detector
     }
 
     /* Called once by HA when the card config is parsed */
@@ -451,6 +452,10 @@
       if (this._focusHandler) {
         window.removeEventListener('focus', this._focusHandler);
         this._focusHandler = null;
+      }
+      if (this._healthTimer) {
+        clearInterval(this._healthTimer);
+        this._healthTimer = null;
       }
       if (this._map) {
         this._map.remove();
@@ -560,31 +565,51 @@
       new ResizeObserver(() => map.invalidateSize())
         .observe(this._$('#map-wrap'));
 
-      // Recover from blank map after browser idle (no tab switch — same tab left sitting).
-      // Browser suspends Leaflet's rAF tile-load loop; on window focus we force a
-      // full tile redraw + size revalidation so tiles reload without a page refresh.
-      this._focusHandler = () => {
-        if (!this._map) return;
-        requestAnimationFrame(() => {
-          this._map.invalidateSize();
-          if (this._tileLayer) this._tileLayer.redraw();
-        });
-      };
+      // Recover from blank map after browser idle / wallpanel / tab switch.
+      // Single requestAnimationFrame is unreliable — it fires before the container
+      // finishes re-layout and invalidateSize() may run at height ≈ 0, locking
+      // the map into a broken state. _fixMap() guards on offsetHeight and retries.
+      this._focusHandler = () => this._fixMap();
       window.addEventListener('focus', this._focusHandler);
 
-      // Re-validate map size and reload tiles when browser tab returns from background.
-      // Without this, long background sessions leave the map blank on return.
       this._visChangeHandler = () => {
-        if (!document.hidden && this._map) {
-          requestAnimationFrame(() => {
-            this._map.invalidateSize();
-            if (this._tileLayer) this._tileLayer.redraw();
-          });
-        }
+        if (!document.hidden) this._fixMap();
       };
       document.addEventListener('visibilitychange', this._visChangeHandler);
 
+      // Periodic health check: if the Leaflet SVG overlay has height=0 while
+      // the container is properly sized, the map was invalidated at the wrong
+      // moment (e.g. during a wallpanel fade or HA panel transition). Fix it.
+      this._healthTimer = setInterval(() => {
+        if (document.hidden || !this._map) return;
+        const container = this._map.getContainer();
+        if (!container || container.offsetHeight < 50) return;
+        const svg = this._map.getPanes().overlayPane?.querySelector('svg');
+        const svgH = svg ? (parseInt(svg.getAttribute('height'), 10) || 0) : -1;
+        if (svgH === 0) {
+          this._map.invalidateSize();
+          if (this._tileLayer) this._tileLayer.redraw();
+        }
+      }, 5000);
+
       if (this._hass) this._update();  // apply buffered state
+    }
+
+    /* ── Map recovery helper ──
+     * Called on window focus, visibilitychange, and by the health timer.
+     * Guards on container offsetHeight before calling invalidateSize() so
+     * we never lock the map into a broken zero-height state mid-transition.
+     * Retries at 200 / 600 / 1500 ms to cover slow panel animations (wallpanel). */
+    _fixMap() {
+      const attempt = () => {
+        if (!this._map) return;
+        const container = this._map.getContainer();
+        if (!container || container.offsetHeight < 50) return;
+        this._map.invalidateSize();
+        if (this._tileLayer) this._tileLayer.redraw();
+      };
+      requestAnimationFrame(attempt);
+      [200, 600, 1500].forEach(ms => setTimeout(attempt, ms));
     }
 
     /* ── RTK antenna marker (blue house) ── */
